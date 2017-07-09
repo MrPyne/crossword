@@ -1,83 +1,35 @@
 package com.pyne.crossword.board
 
-import com.badlogic.gdx.Gdx
-import com.badlogic.gdx.graphics.Color
-import com.badlogic.gdx.graphics.Pixmap
-import com.badlogic.gdx.graphics.Texture
-import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
-import com.badlogic.gdx.graphics.g2d.TextureRegion
+import com.badlogic.gdx.math.Vector2
+import com.badlogic.gdx.utils.Disposable
 import java.util.*
+
 
 /**
  * Created by matts on 27/05/17.
  */
-class WordPiece(wordStr: String = "", wordClue: String = "") {
+class WordPiece(wordStr: String = "", wordClue: String = "") : Disposable {
 
     var wordStr: String = wordStr
     var wordClue: String = wordClue
+    var wordNumber: Int = 0
     var orientationVertical: Boolean = false
     var boardStartX: Int = 0
     var boardStartY: Int = 0
-    var cellXSize: Float = 0f
-    var cellYSize: Float = 0f
+    var cells: ArrayList<CharacterCell> = arrayListOf()
+    var complete: Boolean = false
 
-    val texture: Texture by lazy {
-        createTexture()
+    fun checkIfComplete(): Boolean {
+        return cells.all { cell -> cell.isCorrect() }
     }
-
-
-    fun createTexture(): Texture {
-        val width: Int = when (orientationVertical) {
-            true -> cellXSize.toInt()
-            else -> (cellXSize * wordStr.length).toInt()
-        }
-
-        val height: Int = when (orientationVertical) {
-            true -> (cellYSize * wordStr.length).toInt()
-            else -> cellYSize.toInt()
-        }
-
-        val pixmap: Pixmap = Pixmap(width, height, Pixmap.Format.RGBA8888)
-        pixmap.setColor(Color.WHITE)
-
-        val font: BitmapFont = BitmapFont()
-        val data: BitmapFont.BitmapFontData = font.data
-        val fontPixmap: Pixmap = Pixmap(Gdx.files.internal(data.imagePaths[0]))
-        var charCountDrawn: Int = 1
-
-        wordStr.forEach { char ->
-            kotlin.run {
-                val glyph: BitmapFont.Glyph = data.getGlyph(char.toLowerCase())
-                if (orientationVertical) {
-                    pixmap.drawPixmap(fontPixmap,
-                            (cellXSize.toInt() - glyph.width) / 2,
-                            (cellYSize.toInt() * charCountDrawn - glyph.height) / 2,
-                            glyph.srcX, glyph.srcY, glyph.width, glyph.height)
-                } else {
-                    pixmap.drawPixmap(fontPixmap,
-                            (cellXSize.toInt() * charCountDrawn - glyph.width) / 2,
-                            (cellYSize.toInt() - glyph.height) / 2,
-                            glyph.srcX, glyph.srcY, glyph.width, glyph.height)
-                }
-                charCountDrawn++
-            }
-        }
-        val texture: Texture = Texture(pixmap);
-
-//        val textureRegion: TextureRegion = TextureRegion(texture)
-//        textureRegion.flip(false, true)
-
-        return texture
-    }
-
 
     fun connectWord(wordPiece: WordPiece): Boolean {
         val wordConnectAt: ArrayList<Pair<Int, Int>> = arrayListOf()
 
         for (i in 0..wordStr.length - 1) {
             for (j in 0..wordPiece.wordStr.length - 1) {
-                if (wordStr[i].equals(wordPiece.wordStr[j])) {
+                if (!(i == 0 && j == 0) && wordStr[i].equals(wordPiece.wordStr[j])) {
                     wordConnectAt.add(Pair(i, j))
                 }
             }
@@ -86,13 +38,14 @@ class WordPiece(wordStr: String = "", wordClue: String = "") {
         if (!wordConnectAt.isEmpty()) {
             wordPiece.orientationVertical = !orientationVertical
             val connection: Pair<Int, Int> = wordConnectAt[Random().nextInt(wordConnectAt.size)]
-            if (orientationVertical) {
-                wordPiece.boardStartX = boardStartX - connection.second
-                wordPiece.boardStartY = connection.first + boardStartY
-            } else {
+            if (wordPiece.orientationVertical) {
+                wordPiece.boardStartX = boardStartX + connection.first
                 wordPiece.boardStartY = boardStartY - connection.second
-                wordPiece.boardStartX = connection.first + boardStartX
+            } else {
+                wordPiece.boardStartY = boardStartY + connection.first
+                wordPiece.boardStartX = boardStartX - connection.second
             }
+
             return true
         }
 
@@ -101,36 +54,43 @@ class WordPiece(wordStr: String = "", wordClue: String = "") {
 
     fun collidesBadlyWith(wordPiece: WordPiece): Boolean {
 
-        if (wordPiece.orientationVertical == orientationVertical) {
-            if (wordPiece.boardStartX == boardStartX) {
-                return !verticalBadCollisionCheck(wordPiece)
-            }
-        } else {
-            if (wordPiece.boardStartY == boardStartY) {
-                return !horizontalBadCollisionCheck(wordPiece)
+        for (charIndex in 0..wordPiece.wordStr.length - 1) {
+            for (thisCharIndex in 0..wordStr.length - 1) {
+                if (sharesBoardPosition(wordPiece, charIndex, thisCharIndex)
+                        && (!hasSameCharAt(wordPiece, charIndex, thisCharIndex)
+                        || sameInitialBoardPosition(wordPiece))) {
+                    return true
+                }
             }
         }
-
 
         return false
     }
 
-    private fun verticalBadCollisionCheck(wordPiece: WordPiece): Boolean {
-        return (boardStartY..boardEndY())
-                .intersect(wordPiece.boardStartY..wordPiece.boardEndY())
-                .any { sharedLocY ->
-                    !wordStr[sharedLocY - boardStartY]
-                            .equals(wordPiece.wordStr[sharedLocY - wordPiece.boardStartY])
-                }
+    fun sameInitialBoardPosition(wordPiece: WordPiece): Boolean {
+        return boardStartX == wordPiece.boardStartX && boardStartY == wordPiece.boardStartY
     }
 
-    private fun horizontalBadCollisionCheck(wordPiece: WordPiece): Boolean {
-        return (boardStartX..boardEndX())
-                .intersect(wordPiece.boardStartX..wordPiece.boardEndX())
-                .any { sharedLocX ->
-                    !wordStr[sharedLocX - boardStartX]
-                            .equals(wordPiece.wordStr[sharedLocX - wordPiece.boardStartX])
-                }
+    private fun hasSameCharAt(wordPiece: WordPiece, charIndex: Int, thisCharIndex: Int) = wordPiece.wordStr[charIndex].equals(wordStr[thisCharIndex])
+
+    private fun sharesBoardPosition(wordPiece: WordPiece, charIndex: Int, thisCharIndex: Int) = wordPiece.boardPositionOf(charIndex).equals(boardPositionOf(thisCharIndex))
+
+    fun boardYOf(index: Int): Int {
+        if (orientationVertical) {
+            return boardStartY + index
+        }
+        return boardStartY
+    }
+
+    fun boardXOf(index: Int): Int {
+        if (orientationVertical) {
+            return boardStartX
+        }
+        return boardStartX + index
+    }
+
+    fun boardPositionOf(index: Int): Pair<Int, Int> {
+        return Pair(boardXOf(index), boardYOf(index))
     }
 
     fun boardEndX(): Int {
@@ -147,7 +107,57 @@ class WordPiece(wordStr: String = "", wordClue: String = "") {
         return boardStartY
     }
 
-    fun draw(batch: SpriteBatch) {
-        batch.draw(texture, boardStartX * cellXSize, boardStartY * cellYSize)
+    fun generateCells(board: Board) {
+        cells = arrayListOf()
+        for (i in 0..wordStr.length - 1) {
+
+            cells.add(CharacterCell.Builder()
+                    .withCellSize(board.cellSize)
+                    .withBoardX(boardXOf(i))
+                    .withBoardY(boardYOf(i))
+                    .withCharacterIndex(i)
+                    .withWordNumber(wordNumber)
+                    .withCharacter(wordStr[i])
+                    .withNumCharsToChoose(board.difficulty)
+                    .withBigFont(board.bigFont)
+                    .withSmallFont(board.smallFont)
+                    .build())
+
+            cells.forEach { it.parentWord = this }
+        }
     }
+
+    fun draw(batch: SpriteBatch, board: Board) {
+        var charCountDrawn: Int = 1
+        cells.forEach { cell ->
+            kotlin.run {
+                var xPos = 0f
+                var yPos = cell.size.y * (cells.size - charCountDrawn)
+                if (!orientationVertical) {
+                    xPos = cell.size.x * (charCountDrawn - 1)
+                    yPos = 0f
+                }
+                batch.draw(cell.texture,
+                        xPos + (boardStartX * board.cellSize.x),
+                        yPos + (board.cols - boardEndY() - 1) * board.cellSize.y)
+                charCountDrawn++
+            }
+        }
+    }
+
+    override fun toString(): String {
+        return "WordPiece(wordStr='$wordStr'" +
+                ", wordClue='$wordClue'" +
+                ", orientationVertical=$orientationVertical" +
+                ", boardStartX=$boardStartX" +
+                ", boardStartY=$boardStartY" +
+                ", boardEndX=${boardEndX()}" +
+                ", boardEndY=${boardEndY()}" +
+                ", cells=${cells.size})"
+    }
+
+    override fun dispose() {
+        cells.forEach { it.dispose() }
+    }
+
 }

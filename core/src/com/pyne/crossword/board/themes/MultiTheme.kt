@@ -8,6 +8,7 @@ import java.util.*
 class MultiTheme : IBoardTheme {
 
     val themes: HashSet<IBoardTheme> = hashSetOf()
+    private var lastUsedTheme: IBoardTheme = this
 
     fun clearTheme() {
         themes.clear()
@@ -18,7 +19,12 @@ class MultiTheme : IBoardTheme {
     }
 
     override fun getRandomWordCluePair(): Map.Entry<String, String> {
-        return themes.elementAt(Random().nextInt(themes.size))
-                .getRandomWordCluePair()
+        lastUsedTheme = themes.elementAt(Random().nextInt(themes.size))
+        return lastUsedTheme.getRandomWordCluePair()
     }
+
+    override fun putWordBack(wordInfo: Map.Entry<String, String>) {
+        lastUsedTheme.putWordBack(wordInfo)
+    }
+
 }

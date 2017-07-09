@@ -5,4 +5,5 @@ package com.pyne.crossword.board.themes
  */
 interface IBoardTheme {
     fun getRandomWordCluePair(): Map.Entry<String, String>
+    fun putWordBack(wordInfo: Map.Entry<String, String>)
 }
